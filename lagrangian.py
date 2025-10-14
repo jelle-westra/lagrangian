@@ -28,14 +28,20 @@ class LagrangianSolver(ABC):
     
     def qddot(self, t, q, qdot):
         u = torch.tensor([t, *q, *qdot], requires_grad=True, dtype=torch.float64)
-
-        Hinv = torch.inverse(hessian(self.lagrangian, u)[self.n+1:, self.n+1:])
-        J_L = jacobian(self.lagrangian, u)[1:self.n+1]
-        J_Q = jacobian(self.Q, u)[self.n+1:]
-
-        H = hessian(self.lagrangian, u)[self.n+1:, 1:self.n+1]
+        H = hessian(self.lagrangian, u)
         
-        return Hinv @ ((J_L - J_Q) - H @ qdot)
+        # J_L = dL/dq
+        J_L = jacobian(self.lagrangian, u)[1:self.n+1]
+        
+        # J_Q = dQ/dq_dot (dissipative forces)
+        J_Q = jacobian(self.Q, u)[self.n+1:]
+        
+        # Generalized forces F = J_L - J_Q - H @ qdot
+        F = (J_L - J_Q) - H[self.n+1:, 1:self.n+1] @ qdot
+
+        M_inv = torch.inverse(H[self.n+1:, self.n+1:])
+        qddot = (M_inv @ F)
+        return qddot
     
     def solve(self, u0: torch.Tensor, t: torch.Tensor) -> tuple:
         self.n = u0.size()[0]//2
